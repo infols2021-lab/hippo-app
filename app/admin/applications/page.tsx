@@ -1,56 +1,45 @@
 import { redirect } from "next/navigation";
-import { createSupabaseServerClient } from "../lib/supabase/server";
-import { Page } from "../ui/Layout";
+import { Page } from "../../ui/Layout";
+import { getMyAdminContext } from "../../lib/admin/server";
+import { createSupabaseServerClient } from "../../lib/supabase/server";
+import AdminApplicationsClient from "./view-client";
 
 export const dynamic = "force-dynamic";
 
-export default async function ApplicationsPage() {
+export default async function AdminApplicationsPage() {
+  const ctx = await getMyAdminContext();
+  if (!ctx.user) redirect("/login");
+  if (!ctx.isSuper && ctx.regionIds.length === 0) redirect("/admin");
+
   const supabase = await createSupabaseServerClient();
-  const { data: u } = await supabase.auth.getUser();
-  if (!u.user) redirect("/login");
+
+  const { data: regions } = await supabase
+    .from("regions")
+    .select("id,name,is_active")
+    .order("name");
 
   const { data: apps, error } = await supabase
     .from("applications_with_candidate")
-    .select("id,app_no,created_at,region_id,verified_at,candidate_full_name,candidate_birthdate")
-    .order("created_at", { ascending: false });
+    .select(
+      "id,app_no,region_id,created_at,payment_verified,candidate_doc_verified,parent_doc_verified,verified_at,candidate_full_name,candidate_birthdate,drive_exported_at,drive_exported_by,drive_exported_count"
+    )
+    .order("created_at", { ascending: false })
+    .limit(800);
+
+  const ids = (apps ?? []).map((a: any) => a.id);
+  let files: any[] = [];
+  if (ids.length) {
+    const { data: f } = await supabase
+      .from("application_files")
+      .select("application_id,file_type,storage_path")
+      .in("application_id", ids);
+    files = f ?? [];
+  }
 
   return (
-    <Page
-      title="Заявки"
-      subtitle="Создавай и загружай документы"
-      right={
-        <div style={{ display: "flex", gap: 10 }}>
-          <a className="btn" href="/profile">Профиль</a>
-          <a className="btn btnPrimary" href="/applications/new">Новая заявка</a>
-        </div>
-      }
-    >
+    <Page title="Заявки (админ)" subtitle={ctx.isSuper ? "Все регионы" : "Ваши регионы"} right={<a className="btn" href="/admin">← Админка</a>}>
       {error && <div className="alert alertErr">{error.message}</div>}
-
-      {!apps?.length ? (
-        <div className="alert">Пока заявок нет. Создай первую.</div>
-      ) : (
-        <div style={{ display: "grid", gap: 10 }}>
-          {apps.map((a: any) => (
-            <a key={a.id} className="card" style={{ padding: 14, textDecoration: "none" }} href={`/applications/${a.id}`}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
-                <div>
-                  <div style={{ fontWeight: 900 }}>
-                    №{a.app_no} · {a.candidate_full_name ?? "—"} {a.verified_at ? "✅" : ""}
-                  </div>
-                  <div className="sub">
-                    Регион: <b>{a.region_id}</b> · Создана: <b>{new Date(a.created_at).toLocaleString()}</b>
-                  </div>
-                  <div className="sub">
-                    Статус: <b>{a.verified_at ? "Подтверждена" : "Не подтверждена"}</b>
-                  </div>
-                </div>
-                <span className="pill">Открыть →</span>
-              </div>
-            </a>
-          ))}
-        </div>
-      )}
+      <AdminApplicationsClient isSuper={ctx.isSuper} regions={regions ?? []} apps={apps ?? []} files={files} />
     </Page>
   );
 }
