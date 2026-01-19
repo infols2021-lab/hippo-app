@@ -124,10 +124,12 @@ export default function ApplicationClient({ app, files }: { app: any; files: App
           </div>
 
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <Button onClick={() => setPayOpen(true)}>Оплатить</Button>
-            <Button onClick={onDelete} className="btn" style={{ borderColor: "rgba(255,77,109,.35)" }}>
-              Удалить
-            </Button>
+               {!docsLocked && (
+                 <Button onClick={onDelete} className="btn" style={{ borderColor: "rgba(255,77,109,.35)" }}>
+                   Удалить
+                 </Button>
+               )}
+
           </div>
         </div>
 
