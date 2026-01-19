@@ -45,7 +45,7 @@ export default async function ApplicationsPage() {
   const { data: apps, error } = await supabase
     .from("applications_with_candidate")
     .select(
-      "id,created_at,payment_verified,candidate_doc_verified,parent_doc_verified,candidate_full_name,candidate_birthdate"
+      "id,app_no,created_at,region_id,drive_exported_at,payment_verified,candidate_doc_verified,parent_doc_verified,candidate_full_name,candidate_birthdate"
     )
     .order("created_at", { ascending: false });
 
@@ -89,9 +89,13 @@ export default async function ApplicationsPage() {
       const types = fileMap.get(a.id) ?? new Set<string>();
       return {
         id: a.id,
+        app_no: a.app_no ?? null,
+        region_id: a.region_id ?? null,
         created_at: a.created_at,
         full_name: a.candidate_full_name ?? "—",
         birthdate: a.candidate_birthdate ? String(a.candidate_birthdate) : null,
+
+        drive_exported_at: a.drive_exported_at ? String(a.drive_exported_at) : null,
 
         has_payment: types.has("payment"),
         has_candidate_doc: types.has("candidate_doc"),
@@ -127,10 +131,24 @@ export default async function ApplicationsPage() {
             >
               <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
                 <div>
-                  <div style={{ fontWeight: 800, fontSize: 16 }}>{r.full_name}</div>
-                  <div className="sub">Создана: <b>{new Date(r.created_at).toLocaleString()}</b></div>
+                  <div style={{ fontWeight: 800, fontSize: 16 }}>
+                    {r.app_no ? `№${r.app_no} · ` : ""}{r.full_name}
+                  </div>
+
+                  <div className="sub">
+                    Создана: <b>{new Date(r.created_at).toLocaleString()}</b>
+                    {r.region_id ? <> · Регион: <b>{r.region_id}</b></> : null}
+                  </div>
+
                   <div className="sub">{statusText(r)}</div>
+
+                  {r.drive_exported_at && (
+                    <div className="sub">
+                      Drive: ✅ отправлялась <b>{new Date(r.drive_exported_at).toLocaleString()}</b>
+                    </div>
+                  )}
                 </div>
+
                 <span className="pill">Открыть →</span>
               </div>
             </a>

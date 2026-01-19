@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from "../lib/supabase/server";
 import { Page } from "../ui/Layout";
 import ProfileForm from "./profile-form";
 import ProfileDocs from "./profile-docs";
+import { getMyAdminContext } from "../lib/admin/server";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,9 @@ export default async function ProfilePage() {
   const supabase = await createSupabaseServerClient();
   const { data: userRes } = await supabase.auth.getUser();
   if (!userRes.user) redirect("/login");
+
+  const adminCtx = await getMyAdminContext();
+  const isAdmin = !!adminCtx.user && (adminCtx.isSuper || adminCtx.regionIds.length > 0);
 
   const { data: profile, error } = await supabase
     .from("profiles")
@@ -43,11 +47,12 @@ export default async function ProfilePage() {
       title="Профиль"
       subtitle="Данные + документы"
       right={
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <a className="btn" href="/candidates">Кандидаты</a>
           <a className="btn" href="/applications">Заявки</a>
+          {isAdmin && <a className="btn btnPrimary" href="/admin">Админка</a>}
           <form action="/auth/logout" method="post">
-            <button className="btn btnPrimary" type="submit">Выйти</button>
+            <button className="btn" type="submit">Выйти</button>
           </form>
         </div>
       }

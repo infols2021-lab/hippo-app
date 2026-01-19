@@ -22,10 +22,7 @@ export default function LoginPage() {
       return setErr(error.message);
     }
 
-    // ВАЖНО: ждём, чтобы сессия точно записалась
     await supabase.auth.getSession();
-
-    // Жёсткий переход без router.push — чтобы сервер сразу видел cookie
     window.location.href = redirectTo;
   }
 
@@ -44,40 +41,19 @@ export default function LoginPage() {
         <div style={{ display: "grid", gap: 12, marginTop: 16 }}>
           <label className="label">
             <span>Email</span>
-            <input
-              className="input"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="email"
-            />
+            <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
           </label>
 
           <label className="label">
             <span>Пароль</span>
-            <input
-              className="input"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-            />
+            <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
           </label>
 
-          <button
-            className="btn btnPrimary"
-            disabled={loading !== null}
-            onClick={() => signIn("/profile")}
-            type="button"
-          >
+          <button className="btn btnPrimary" disabled={loading !== null} onClick={() => signIn("/profile")} type="button">
             {loading === "user" ? "Входим..." : "Войти в кабинет"}
           </button>
 
-          <button
-            className="btn"
-            disabled={loading !== null}
-            onClick={() => signIn("/admin")}
-            type="button"
-          >
+          <button className="btn" disabled={loading !== null} onClick={() => signIn("/admin")} type="button">
             {loading === "admin" ? "Входим..." : "Войти в админку"}
           </button>
 
@@ -86,6 +62,7 @@ export default function LoginPage() {
 
         <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
           <a className="btn" href="/register">Регистрация</a>
+          <a className="btn" href="/forgot-password">Забыли пароль?</a>
         </div>
       </div>
     </main>

@@ -1,87 +1,81 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "../lib/supabase/browser";
 
-const REGIONS = [
-  { id: "bel", name: "Белгородская" },
-  { id: "vor", name: "Воронежская" },
-  { id: "kur", name: "Курская" },
-  { id: "tam", name: "Тамбовская" },
-  { id: "nnov", name: "Нижегородская" },
-  { id: "lip", name: "Липецкая" },
-];
-
 export default function RegisterPage() {
-  const router = useRouter();
   const supabase = createSupabaseBrowserClient();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [regionId, setRegionId] = useState("bel");
-
-  const [err, setErr] = useState<string | null>(null);
+  const [password2, setPassword2] = useState("");
   const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [ok, setOk] = useState<string | null>(null);
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function onRegister() {
     setErr(null);
+    setOk(null);
+
+    if (!email.trim()) return setErr("Введите email.");
+    if (password.length < 6) return setErr("Пароль минимум 6 символов.");
+    if (password !== password2) return setErr("Пароли не совпадают.");
+
     setLoading(true);
 
-    const { data, error } = await supabase.auth.signUp({ email, password });
-    if (error) {
-      setLoading(false);
-      return setErr(error.message);
-    }
-
-    // Профиль уже создастся триггером.
-    // Но region мы проставим сразу:
-    const userId = data.user?.id;
-    if (userId) {
-      const { error: e2 } = await supabase
-        .from("profiles")
-        .update({ region_id: regionId })
-        .eq("user_id", userId);
-
-      if (e2) {
-        setLoading(false);
-        return setErr(e2.message);
-      }
-    }
+    const { error } = await supabase.auth.signUp({
+      email: email.trim(),
+      password,
+    });
 
     setLoading(false);
-    router.push("/profile");
 
+    if (error) return setErr(error.message);
+
+    setOk("Аккаунт создан ✅ Теперь войди на странице входа.");
   }
 
   return (
-    <main style={{ maxWidth: 420, margin: "40px auto", padding: 16 }}>
-      <h1 style={{ fontSize: 28, fontWeight: 700 }}>Регистрация</h1>
+    <main className="container">
+      <div className="card" style={{ maxWidth: 440, margin: "0 auto" }}>
+        <div style={{ marginBottom: 10 }}>
+          <div className="pill">HIPPO</div>
+        </div>
 
-      <form onSubmit={onSubmit} style={{ display: "grid", gap: 12, marginTop: 16 }}>
-        <input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
-        <input placeholder="Пароль" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        <h1 className="h1" style={{ marginBottom: 6 }}>Регистрация</h1>
+        <p className="sub" style={{ marginTop: 0 }}>
+          Создай аккаунт, потом заполни профиль и загружай документы
+        </p>
 
-        <label>
-          Регион
-          <select value={regionId} onChange={(e) => setRegionId(e.target.value)}>
-            {REGIONS.map((r) => (
-              <option key={r.id} value={r.id}>{r.name}</option>
-            ))}
-          </select>
-        </label>
+        <div style={{ display: "grid", gap: 12, marginTop: 16 }}>
+          <label className="label">
+            <span>Email</span>
+            <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
+          </label>
 
-        <button disabled={loading} type="submit">
-          {loading ? "Создаём..." : "Создать аккаунт"}
-        </button>
+          <label className="label">
+            <span>Пароль</span>
+            <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
+          </label>
 
-        {err && <p style={{ color: "crimson" }}>{err}</p>}
-      </form>
+          <label className="label">
+            <span>Повтор пароля</span>
+            <input className="input" type="password" value={password2} onChange={(e) => setPassword2(e.target.value)} autoComplete="new-password" />
+          </label>
 
-      <p style={{ marginTop: 12 }}>
-        Уже есть аккаунт? <a href="/login">Вход</a>
-      </p>
+          <button className="btn btnPrimary" type="button" disabled={loading} onClick={onRegister}>
+            {loading ? "Создаю..." : "Создать аккаунт"}
+          </button>
+
+          {err && <div className="alert alertErr">{err}</div>}
+          {ok && <div className="alert">{ok}</div>}
+        </div>
+
+        <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
+          <a className="btn" href="/login">Вход</a>
+          <a className="btn" href="/forgot-password">Забыли пароль?</a>
+        </div>
+      </div>
     </main>
   );
 }
