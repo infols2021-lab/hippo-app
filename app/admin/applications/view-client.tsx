@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Alert, Button, Select } from "../../ui/Form";
+import { Alert, Button, Select, Input } from "../../ui/Form";
 
 function calcAge(birthdate: string) {
   const d = new Date(birthdate);
@@ -20,6 +20,9 @@ export default function AdminApplicationsClient({
   files: { application_id: string; file_type: string; storage_path: string }[];
 }) {
   const [regionFilter, setRegionFilter] = useState<string>("all");
+  const [onlyPending, setOnlyPending] = useState(false);
+  const [q, setQ] = useState("");
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -32,11 +35,6 @@ export default function AdminApplicationsClient({
     }
     return m;
   }, [files]);
-
-  const filtered = useMemo(() => {
-    if (regionFilter === "all") return apps;
-    return apps.filter((a) => a.region_id === regionFilter);
-  }, [apps, regionFilter]);
 
   function statusRow(a: any) {
     const birthdate = a.candidate_birthdate ? String(a.candidate_birthdate) : null;
@@ -60,6 +58,25 @@ export default function AdminApplicationsClient({
     return { needParent, hasPay, hasCand, hasPar, verified, miss };
   }
 
+  const filtered = useMemo(() => {
+    const qq = q.trim().toLowerCase();
+    return apps
+      .filter((a) => (regionFilter === "all" ? true : a.region_id === regionFilter))
+      .filter((a) => (onlyPending ? !a.verified_at : true))
+      .filter((a) => (qq ? String(a.candidate_full_name ?? "").toLowerCase().includes(qq) : true));
+  }, [apps, regionFilter, onlyPending, q]);
+
+  const selectedIds = useMemo(
+    () => Object.keys(selected).filter((id) => selected[id]),
+    [selected]
+  );
+
+  function toggleAll(checked: boolean) {
+    const next: Record<string, boolean> = {};
+    for (const a of filtered) next[a.id] = checked;
+    setSelected(next);
+  }
+
   async function exportToDrive() {
     setErr(null);
     setOk(null);
@@ -70,7 +87,7 @@ export default function AdminApplicationsClient({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         region_id: regionFilter,
-        application_ids: [], // экспортируем все отфильтрованные
+        application_ids: selectedIds, // если пусто — экспорт по фильтру (в route так и сделано)
       }),
     });
 
@@ -79,7 +96,9 @@ export default function AdminApplicationsClient({
     const data = await res.json().catch(() => null);
     if (!res.ok) return setErr(data?.message || "Export failed");
 
-    setOk(`Отправлено в Drive: ${data.sent} файлов ✅`);
+    setOk(`Экспорт OK: файлов отправлено ${data.sent}, заявок ${data.apps ?? "?"} ✅`);
+    setSelected({});
+    window.location.reload();
   }
 
   return (
@@ -87,7 +106,8 @@ export default function AdminApplicationsClient({
       <div className="card" style={{ padding: 14, marginBottom: 12 }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-            <div style={{ fontWeight: 900 }}>Фильтр региона</div>
+            <div style={{ fontWeight: 900 }}>Фильтры</div>
+
             <Select value={regionFilter} onChange={(e) => setRegionFilter(e.target.value)} disabled={!isSuper}>
               <option value="all">Все регионы</option>
               {regions.map((r) => (
@@ -96,16 +116,27 @@ export default function AdminApplicationsClient({
                 </option>
               ))}
             </Select>
-            {!isSuper && <span className="pill">регион фиксирован</span>}
+
+            <label className="sub" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input type="checkbox" checked={onlyPending} onChange={(e) => setOnlyPending(e.target.checked)} />
+              Только непроверенные
+            </label>
+
+            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Поиск по ФИО" />
           </div>
 
-          <Button variant="primary" onClick={exportToDrive} disabled={exporting}>
-            {exporting ? "Экспорт..." : "Экспорт в Google Drive"}
-          </Button>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <button className="btn" type="button" onClick={() => toggleAll(true)}>Выбрать все</button>
+            <button className="btn" type="button" onClick={() => toggleAll(false)}>Снять</button>
+
+            <Button variant="primary" onClick={exportToDrive} disabled={exporting}>
+              {exporting ? "Экспорт..." : selectedIds.length ? `Экспорт выбранных (${selectedIds.length})` : "Экспорт по фильтру"}
+            </Button>
+          </div>
         </div>
 
         <div className="sub" style={{ marginTop: 8 }}>
-          Экспортирует файлы заявок (оплата/кандидат/родитель) в папки региона с именем: <b>№Номер_ФИО_тип.ext</b>
+          Имя файлов в Drive: <b>№Номер_ФИО_тип.ext</b>. Экспорт можно повторять сколько угодно.
         </div>
       </div>
 
@@ -115,30 +146,38 @@ export default function AdminApplicationsClient({
         <div style={{ display: "grid", gap: 10 }}>
           {filtered.map((a) => {
             const s = statusRow(a);
+            const exported = a.drive_exported_at ? new Date(a.drive_exported_at).toLocaleString() : null;
+
             return (
-              <a
-                key={a.id}
-                href={`/admin/applications/${a.id}`}
-                className="card"
-                style={{ padding: 14, textDecoration: "none" }}
-              >
+              <div key={a.id} className="card" style={{ padding: 14 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
-                  <div>
-                    <div style={{ fontWeight: 900 }}>
-                      №{a.app_no} · {a.candidate_full_name ?? "—"} {s.verified ? "✅" : ""}
+                  <label style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                    <input
+                      type="checkbox"
+                      checked={!!selected[a.id]}
+                      onChange={(e) => setSelected((prev) => ({ ...prev, [a.id]: e.target.checked }))}
+                    />
+                    <div>
+                      <div style={{ fontWeight: 900 }}>
+                        №{a.app_no} · {a.candidate_full_name ?? "—"} {s.verified ? "✅" : ""}
+                      </div>
+                      <div className="sub">
+                        Регион: <b>{a.region_id}</b> · Создана: <b>{new Date(a.created_at).toLocaleString()}</b>
+                      </div>
+                      <div className="sub">
+                        Файлы: {s.hasPay ? "💳" : "—"} {s.hasCand ? "🪪" : "—"} {s.needParent ? (s.hasPar ? "👤" : "—") : "👤(не нужно)"}
+                        {" · "}
+                        {s.verified ? "Подтверждена" : s.miss.length ? `Не загружено: ${s.miss.join(", ")}` : "На проверке"}
+                      </div>
+                      <div className="sub">
+                        Drive: {exported ? `✅ отправлялась ${exported}${a.drive_exported_count ? ` · файлов ${a.drive_exported_count}` : ""}` : "— не отправлялась"}
+                      </div>
                     </div>
-                    <div className="sub">
-                      Регион: <b>{a.region_id}</b> · Создана: <b>{new Date(a.created_at).toLocaleString()}</b>
-                    </div>
-                    <div className="sub">
-                      Файлы: {s.hasPay ? "💳" : "—"} {s.hasCand ? "🪪" : "—"} {s.needParent ? (s.hasPar ? "👤" : "—") : "👤(не нужно)"}
-                      {" · "}
-                      {s.verified ? "Подтверждена" : s.miss.length ? `Не загружено: ${s.miss.join(", ")}` : "На проверке"}
-                    </div>
-                  </div>
-                  <span className="pill">Открыть →</span>
+                  </label>
+
+                  <a className="btn" href={`/admin/applications/${a.id}`}>Открыть</a>
                 </div>
-              </a>
+              </div>
             );
           })}
         </div>

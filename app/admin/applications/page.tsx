@@ -20,9 +20,9 @@ export default async function AdminApplicationsPage() {
 
   const { data: apps, error } = await supabase
     .from("applications_with_candidate")
-    .select("id,app_no,region_id,created_at,payment_verified,candidate_doc_verified,parent_doc_verified,verified_at,candidate_full_name,candidate_birthdate")
+    .select("id,app_no,region_id,created_at,payment_verified,candidate_doc_verified,parent_doc_verified,verified_at,candidate_full_name,candidate_birthdate,drive_exported_at,drive_exported_by,drive_exported_count")
     .order("created_at", { ascending: false })
-    .limit(500);
+    .limit(800);
 
   const ids = (apps ?? []).map((a: any) => a.id);
   let files: any[] = [];
@@ -35,18 +35,9 @@ export default async function AdminApplicationsPage() {
   }
 
   return (
-    <Page
-      title="Заявки (админ)"
-      subtitle={ctx.isSuper ? "Все регионы" : "Ваш(и) регион(ы)"}
-      right={<a className="btn" href="/admin">← Админка</a>}
-    >
+    <Page title="Заявки (админ)" subtitle={ctx.isSuper ? "Все регионы" : "Ваши регионы"} right={<a className="btn" href="/admin">← Админка</a>}>
       {error && <div className="alert alertErr">{error.message}</div>}
-      <AdminApplicationsClient
-        isSuper={ctx.isSuper}
-        regions={regions ?? []}
-        apps={apps ?? []}
-        files={files}
-      />
+      <AdminApplicationsClient isSuper={ctx.isSuper} regions={regions ?? []} apps={apps ?? []} files={files} />
     </Page>
   );
 }
