@@ -14,18 +14,17 @@ export default function ProfileDocs({
   const [ok, setOk] = useState<string | null>(null);
   const [label, setLabel] = useState("");
 
-  const [uploading, setUploading] = useState<null | "profile_candidate" | "parent">(null);
+  const [busy, setBusy] = useState<null | "profile_candidate" | "parent" | `del:${string}`>(null);
 
   async function uploadProfileCandidate(file: File) {
     setErr(null); setOk(null);
-    setUploading("profile_candidate");
+    setBusy("profile_candidate");
 
     const form = new FormData();
     form.append("file", file);
 
     const res = await fetch("/docs/upload/profile-candidate", { method: "POST", body: form });
-
-    setUploading(null);
+    setBusy(null);
 
     const data = await res.json().catch(() => null);
     if (!res.ok) return setErr(data?.message || "Не удалось загрузить.");
@@ -35,15 +34,14 @@ export default function ProfileDocs({
 
   async function uploadParent(file: File) {
     setErr(null); setOk(null);
-    setUploading("parent");
+    setBusy("parent");
 
     const form = new FormData();
     form.append("label", label);
     form.append("file", file);
 
     const res = await fetch("/docs/upload/parent", { method: "POST", body: form });
-
-    setUploading(null);
+    setBusy(null);
 
     const data = await res.json().catch(() => null);
     if (!res.ok) return setErr(data?.message || "Не удалось загрузить.");
@@ -52,11 +50,32 @@ export default function ProfileDocs({
     window.location.reload();
   }
 
+  async function deleteParent(id: string) {
+    if (!confirm("Удалить этот документ из профиля? (Старые заявки не сломаются)")) return;
+
+    setErr(null); setOk(null);
+    setBusy(`del:${id}`);
+
+    const res = await fetch("/docs/delete/parent", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+
+    setBusy(null);
+
+    const data = await res.json().catch(() => null);
+    if (!res.ok) return setErr(data?.message || "Не удалось удалить документ.");
+
+    setOk("Документ удалён из профиля ✅");
+    window.location.reload();
+  }
+
   function viewDoc(path: string) {
     window.open(`/files/view?bucket=documents&path=${encodeURIComponent(path)}`, "_blank");
   }
 
-  const showProgress = uploading !== null;
+  const showProgress = busy !== null;
 
   return (
     <>
@@ -65,7 +84,7 @@ export default function ProfileDocs({
 
         {showProgress && (
           <>
-            <div className="sub">Загрузка файла…</div>
+            <div className="sub">Выполняется операция…</div>
             <div className="progressWrap">
               <div className="progressBar" />
             </div>
@@ -84,13 +103,13 @@ export default function ProfileDocs({
           <div style={{ display: "flex", gap: 10 }}>
             {profileCandidateDoc && <Button onClick={() => viewDoc(profileCandidateDoc.storage_path)}>Просмотреть</Button>}
 
-            <label className="btn" style={{ opacity: uploading ? 0.7 : 1 }}>
-              {uploading === "profile_candidate" ? "Загрузка..." : "Загрузить/обновить"}
+            <label className="btn" style={{ opacity: busy ? 0.7 : 1 }}>
+              {busy === "profile_candidate" ? "Загрузка..." : "Загрузить/обновить"}
               <input
                 type="file"
                 accept="image/*,application/pdf"
                 style={{ display: "none" }}
-                disabled={uploading !== null}
+                disabled={busy !== null}
                 onChange={(e) => {
                   const f = e.target.files?.[0];
                   if (f) uploadProfileCandidate(f);
@@ -107,18 +126,18 @@ export default function ProfileDocs({
 
         <div className="grid" style={{ marginBottom: 10 }}>
           <Field label="Подпись (необязательно)">
-            <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="например: Паспорт мама" />
+            <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="например: Паспорт мама" disabled={busy !== null} />
           </Field>
 
           <div style={{ display: "grid", gap: 6 }}>
             <span className="label">Загрузка</span>
-            <label className="btn" style={{ opacity: uploading ? 0.7 : 1 }}>
-              {uploading === "parent" ? "Загрузка..." : "Загрузить документ родителя"}
+            <label className="btn" style={{ opacity: busy ? 0.7 : 1 }}>
+              {busy === "parent" ? "Загрузка..." : "Загрузить документ родителя"}
               <input
                 type="file"
                 accept="image/*,application/pdf"
                 style={{ display: "none" }}
-                disabled={uploading !== null}
+                disabled={busy !== null}
                 onChange={(e) => {
                   const f = e.target.files?.[0];
                   if (f) uploadParent(f);
@@ -133,17 +152,31 @@ export default function ProfileDocs({
           <div className="alert">Пока нет документов родителя.</div>
         ) : (
           <div style={{ display: "grid", gap: 8 }}>
-            {parentDocs.map((d) => (
-              <div key={d.id} className="card" style={{ padding: 12 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
-                  <div>
-                    <div style={{ fontWeight: 800 }}>{d.label ?? "Документ родителя"}</div>
-                    <div className="sub">{new Date(d.created_at).toLocaleString()}</div>
+            {parentDocs.map((d) => {
+              const delBusy = busy === `del:${d.id}`;
+              return (
+                <div key={d.id} className="card" style={{ padding: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                    <div>
+                      <div style={{ fontWeight: 800 }}>{d.label ?? "Документ родителя"}</div>
+                      <div className="sub">{new Date(d.created_at).toLocaleString()}</div>
+                    </div>
+
+                    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                      <Button onClick={() => viewDoc(d.storage_path)}>Просмотреть</Button>
+                      <Button
+                        className="btn"
+                        onClick={() => deleteParent(d.id)}
+                        disabled={busy !== null}
+                        style={{ borderColor: "rgba(255,77,109,.35)" }}
+                      >
+                        {delBusy ? "Удаляю..." : "Удалить"}
+                      </Button>
+                    </div>
                   </div>
-                  <Button onClick={() => viewDoc(d.storage_path)}>Просмотреть</Button>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
