@@ -21,6 +21,8 @@ export default function AdminApplicationsClient({
 }) {
   const [regionFilter, setRegionFilter] = useState<string>("all");
   const [err, setErr] = useState<string | null>(null);
+  const [ok, setOk] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const fileMap = useMemo(() => {
     const m = new Map<string, Set<string>>();
@@ -58,21 +60,54 @@ export default function AdminApplicationsClient({
     return { needParent, hasPay, hasCand, hasPar, verified, miss };
   }
 
+  async function exportToDrive() {
+    setErr(null);
+    setOk(null);
+    setExporting(true);
+
+    const res = await fetch("/admin/export/drive", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        region_id: regionFilter,
+        application_ids: [], // экспортируем все отфильтрованные
+      }),
+    });
+
+    setExporting(false);
+
+    const data = await res.json().catch(() => null);
+    if (!res.ok) return setErr(data?.message || "Export failed");
+
+    setOk(`Отправлено в Drive: ${data.sent} файлов ✅`);
+  }
+
   return (
     <>
-      {isSuper && (
-        <div className="card" style={{ padding: 14, marginBottom: 12 }}>
-          <div style={{ fontWeight: 900, marginBottom: 8 }}>Фильтр</div>
-          <Select value={regionFilter} onChange={(e) => setRegionFilter(e.target.value)}>
-            <option value="all">Все регионы</option>
-            {regions.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name} ({r.id})
-              </option>
-            ))}
-          </Select>
+      <div className="card" style={{ padding: 14, marginBottom: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <div style={{ fontWeight: 900 }}>Фильтр региона</div>
+            <Select value={regionFilter} onChange={(e) => setRegionFilter(e.target.value)} disabled={!isSuper}>
+              <option value="all">Все регионы</option>
+              {regions.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name} ({r.id})
+                </option>
+              ))}
+            </Select>
+            {!isSuper && <span className="pill">регион фиксирован</span>}
+          </div>
+
+          <Button variant="primary" onClick={exportToDrive} disabled={exporting}>
+            {exporting ? "Экспорт..." : "Экспорт в Google Drive"}
+          </Button>
         </div>
-      )}
+
+        <div className="sub" style={{ marginTop: 8 }}>
+          Экспортирует файлы заявок (оплата/кандидат/родитель) в папки региона с именем: <b>№Номер_ФИО_тип.ext</b>
+        </div>
+      </div>
 
       {!filtered.length ? (
         <div className="alert">Заявок нет.</div>
@@ -90,7 +125,7 @@ export default function AdminApplicationsClient({
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
                   <div>
                     <div style={{ fontWeight: 900 }}>
-                      {a.candidate_full_name ?? "—"} {s.verified ? "✅" : ""}
+                      №{a.app_no} · {a.candidate_full_name ?? "—"} {s.verified ? "✅" : ""}
                     </div>
                     <div className="sub">
                       Регион: <b>{a.region_id}</b> · Создана: <b>{new Date(a.created_at).toLocaleString()}</b>
@@ -110,6 +145,7 @@ export default function AdminApplicationsClient({
       )}
 
       {err && <Alert type="error">{err}</Alert>}
+      {ok && <Alert type="ok">{ok}</Alert>}
     </>
   );
 }
