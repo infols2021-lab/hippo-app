@@ -28,9 +28,13 @@ export default function ApplicationClient({ app, files }: { app: any; files: App
     return m;
   }, [files]);
 
-  const hasPayment = fileMap.has("payment");
-  const hasCand = fileMap.has("candidate_doc");
-  const hasParent = fileMap.has("parent_doc");
+  const pay = fileMap.get("payment") ?? null;
+  const cand = fileMap.get("candidate_doc") ?? null;
+  const parent = fileMap.get("parent_doc") ?? null;
+
+  const hasPayment = !!pay;
+  const hasCand = !!cand;
+  const hasParent = !!parent;
 
   const isVerified =
     app.payment_verified === true &&
@@ -51,6 +55,12 @@ export default function ApplicationClient({ app, files }: { app: any; files: App
   const [ok, setOk] = useState<string | null>(null);
   const [uploading, setUploading] = useState<null | string>(null);
   const [payOpen, setPayOpen] = useState(false);
+
+  function openFile(path: string) {
+    // application_id нужен, чтобы /files/view проверил доступ по application_files
+    const url = `/files/view?bucket=documents&path=${encodeURIComponent(path)}&application_id=${app.id}`;
+    window.open(url, "_blank");
+  }
 
   async function upload(fileType: "payment" | "candidate_doc" | "parent_doc", file: File) {
     setErr(null);
@@ -80,6 +90,7 @@ export default function ApplicationClient({ app, files }: { app: any; files: App
 
   async function onDelete() {
     if (!confirm("Удалить заявку?")) return;
+
     const res = await fetch("/applications/delete", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -87,8 +98,11 @@ export default function ApplicationClient({ app, files }: { app: any; files: App
     });
     const data = await res.json().catch(() => null);
     if (!res.ok) return setErr(data?.message || "Не удалось удалить.");
+
     window.location.href = "/applications";
   }
+
+  const docsLocked = !!app.verified_at; // если подтверждена — upload уже запрещён на сервере, тут просто UX
 
   return (
     <>
@@ -115,6 +129,12 @@ export default function ApplicationClient({ app, files }: { app: any; files: App
         <div className="alert" style={{ marginTop: 12 }}>
           {statusText}
         </div>
+
+        {docsLocked && (
+          <div className="sub" style={{ marginTop: 8 }}>
+            Документы заблокированы: заявка подтверждена.
+          </div>
+        )}
       </div>
 
       <div className="card" style={{ padding: 14 }}>
@@ -123,16 +143,20 @@ export default function ApplicationClient({ app, files }: { app: any; files: App
         <UploadBlock
           title="Скан оплаты"
           hint="JPG/PDF/PNG (лучше JPG). До 3MB."
-          done={hasPayment}
+          file={pay}
           uploading={uploading === "payment"}
+          locked={docsLocked}
+          onView={() => pay && openFile(pay.storage_path)}
           onSelect={(f) => upload("payment", f)}
         />
 
         <UploadBlock
           title="Документ кандидата"
-          hint="JPG/PDF. До 3MB."
-          done={hasCand}
+          hint="Паспорт/свидетельство. JPG/PDF. До 3MB."
+          file={cand}
           uploading={uploading === "candidate_doc"}
+          locked={docsLocked}
+          onView={() => cand && openFile(cand.storage_path)}
           onSelect={(f) => upload("candidate_doc", f)}
         />
 
@@ -140,11 +164,17 @@ export default function ApplicationClient({ app, files }: { app: any; files: App
           <UploadBlock
             title="Документ родителя/представителя"
             hint="JPG/PDF. До 3MB."
-            done={hasParent}
+            file={parent}
             uploading={uploading === "parent_doc"}
+            locked={docsLocked}
+            onView={() => parent && openFile(parent.storage_path)}
             onSelect={(f) => upload("parent_doc", f)}
           />
         )}
+
+        <div className="sub" style={{ marginTop: 10 }}>
+          Подсказка: PNG часто огромный. Лучше JPG.
+        </div>
       </div>
 
       {err && <Alert type="error">{err}</Alert>}
@@ -163,16 +193,22 @@ export default function ApplicationClient({ app, files }: { app: any; files: App
 function UploadBlock({
   title,
   hint,
-  done,
+  file,
   uploading,
+  locked,
+  onView,
   onSelect,
 }: {
   title: string;
   hint: string;
-  done: boolean;
+  file: AppFile | null;
   uploading: boolean;
+  locked: boolean;
+  onView: () => void;
   onSelect: (file: File) => void;
 }) {
+  const done = !!file;
+
   return (
     <div
       style={{
@@ -182,26 +218,43 @@ function UploadBlock({
         justifyContent: "space-between",
         padding: "10px 0",
         borderBottom: "1px solid rgba(255,255,255,.08)",
+        flexWrap: "wrap",
       }}
     >
-      <div>
-        <div style={{ fontWeight: 800 }}>{done ? "✅ " : ""}{title}</div>
+      <div style={{ minWidth: 220 }}>
+        <div style={{ fontWeight: 800 }}>
+          {done ? "✅ " : ""}{title}
+        </div>
         <div className="sub">{hint}</div>
+        {file && (
+          <div className="sub" style={{ marginTop: 4 }}>
+            Загружен: <b>{new Date(file.created_at).toLocaleString()}</b>
+          </div>
+        )}
       </div>
 
-      <label className="btn" style={{ whiteSpace: "nowrap" }}>
-        {uploading ? "Загрузка..." : done ? "Заменить" : "Загрузить"}
-        <input
-          type="file"
-          accept="image/*,application/pdf"
-          style={{ display: "none" }}
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) onSelect(f);
-            e.currentTarget.value = "";
-          }}
-        />
-      </label>
+      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        {file ? (
+          <Button onClick={onView}>Просмотреть</Button>
+        ) : (
+          <span className="pill">—</span>
+        )}
+
+        <label className="btn" style={{ whiteSpace: "nowrap", opacity: locked ? 0.6 : 1 }}>
+          {uploading ? "Загрузка..." : done ? "Заменить" : "Загрузить"}
+          <input
+            type="file"
+            accept="image/*,application/pdf"
+            style={{ display: "none" }}
+            disabled={locked}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) onSelect(f);
+              e.currentTarget.value = "";
+            }}
+          />
+        </label>
+      </div>
     </div>
   );
 }
