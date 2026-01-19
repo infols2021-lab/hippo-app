@@ -17,6 +17,15 @@ function safeExtFromMime(mime: string | null) {
   return "bin";
 }
 
+function isLocked(app: any) {
+  // жёсткая блокировка:
+  if (app.verified_at) return true;
+  const pay = app.payment_verified === true;
+  const cand = app.candidate_doc_verified === true;
+  const parentOk = app.parent_doc_verified === null || app.parent_doc_verified === true;
+  return pay && cand && parentOk;
+}
+
 export async function POST(req: Request) {
   const supabase = await createSupabaseServerClient();
   const { data: u } = await supabase.auth.getUser();
@@ -34,17 +43,19 @@ export async function POST(req: Request) {
   if (!file) return NextResponse.json({ message: "file required" }, { status: 400 });
 
   const maxMB = 3;
-  if (file.size > maxMB * 1024 * 1024) return NextResponse.json({ message: `File too large. Max ${maxMB}MB.` }, { status: 400 });
+  if (file.size > maxMB * 1024 * 1024) {
+    return NextResponse.json({ message: `File too large. Max ${maxMB}MB.` }, { status: 400 });
+  }
 
   const { data: app, error: aErr } = await supabase
     .from("applications")
-    .select("id, owner_user_id, verified_at")
+    .select("id, owner_user_id, verified_at, payment_verified, candidate_doc_verified, parent_doc_verified")
     .eq("id", application_id)
     .single();
 
   if (aErr || !app) return NextResponse.json({ message: "Application not found" }, { status: 404 });
   if (app.owner_user_id !== u.user.id) return NextResponse.json({ message: "Forbidden" }, { status: 403 });
-  if (app.verified_at) return NextResponse.json({ message: "Заявка уже подтверждена. Изменение документов запрещено." }, { status: 403 });
+  if (isLocked(app)) return NextResponse.json({ message: "Заявка подтверждена. Изменение документов запрещено." }, { status: 403 });
 
   const ext = safeExtFromMime(file.type);
   const path = `users/${u.user.id}/applications/${application_id}/${file_type}.${ext}`;

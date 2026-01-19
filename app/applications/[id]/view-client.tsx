@@ -102,7 +102,12 @@ export default function ApplicationClient({ app, files }: { app: any; files: App
     window.location.href = "/applications";
   }
 
-  const docsLocked = !!app.verified_at; // если подтверждена — upload уже запрещён на сервере, тут просто UX
+  const docsLocked =
+  !!app.verified_at ||
+  (app.payment_verified === true &&
+    app.candidate_doc_verified === true &&
+    (app.parent_doc_verified === null || app.parent_doc_verified === true));
+
 
   return (
     <>
