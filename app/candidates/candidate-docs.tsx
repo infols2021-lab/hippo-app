@@ -12,14 +12,21 @@ export default function CandidateDocs({
 }) {
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   async function upload(file: File) {
-    setErr(null); setOk(null);
+    setErr(null);
+    setOk(null);
+    setUploading(true);
+
     const form = new FormData();
     form.append("candidate_id", candidateId);
     form.append("file", file);
 
     const res = await fetch("/docs/upload/candidate", { method: "POST", body: form });
+
+    setUploading(false);
+
     const data = await res.json().catch(() => null);
     if (!res.ok) return setErr(data?.message || "Не удалось загрузить.");
     setOk("Документ кандидата загружен ✅");
@@ -35,6 +42,16 @@ export default function CandidateDocs({
       <div className="card" style={{ padding: 14 }}>
         <div style={{ fontWeight: 900, marginBottom: 10 }}>Документ кандидата</div>
 
+        {uploading && (
+          <>
+            <div className="sub">Загрузка файла…</div>
+            <div className="progressWrap">
+              <div className="progressBar" />
+            </div>
+            <div style={{ height: 10 }} />
+          </>
+        )}
+
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
           <div>
             <div className="sub">
@@ -44,12 +61,14 @@ export default function CandidateDocs({
 
           <div style={{ display: "flex", gap: 10 }}>
             {latestDoc && <Button onClick={() => viewDoc(latestDoc.storage_path)}>Просмотреть</Button>}
-            <label className="btn">
-              Загрузить/обновить
+
+            <label className="btn" style={{ opacity: uploading ? 0.7 : 1 }}>
+              {uploading ? "Загрузка..." : "Загрузить/обновить"}
               <input
                 type="file"
                 accept="image/*,application/pdf"
                 style={{ display: "none" }}
+                disabled={uploading}
                 onChange={(e) => {
                   const f = e.target.files?.[0];
                   if (f) upload(f);
@@ -61,7 +80,7 @@ export default function CandidateDocs({
         </div>
 
         <div className="sub" style={{ marginTop: 10 }}>
-          Заявки будут подтягивать последний загруженный документ автоматически (и хранить старый в старых заявках).
+          Заявки подтягивают последний загруженный документ автоматически.
         </div>
       </div>
 

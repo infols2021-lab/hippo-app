@@ -51,13 +51,18 @@ export default function ApplicationClient({ app, files }: { app: any; files: App
     return `⚠ Не загружено: ${miss.join(", ")}.`;
   }, [isVerified, hasPayment, hasCand, hasParent, needParent]);
 
+  const docsLocked =
+    !!app.verified_at ||
+    (app.payment_verified === true &&
+      app.candidate_doc_verified === true &&
+      (app.parent_doc_verified === null || app.parent_doc_verified === true));
+
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
-  const [uploading, setUploading] = useState<null | string>(null);
+  const [uploadingType, setUploadingType] = useState<null | "payment" | "candidate_doc" | "parent_doc">(null);
   const [payOpen, setPayOpen] = useState(false);
 
   function openFile(path: string) {
-    // application_id нужен, чтобы /files/view проверил доступ по application_files
     const url = `/files/view?bucket=documents&path=${encodeURIComponent(path)}&application_id=${app.id}`;
     window.open(url, "_blank");
   }
@@ -77,9 +82,9 @@ export default function ApplicationClient({ app, files }: { app: any; files: App
     form.append("file_type", fileType);
     form.append("file", file);
 
-    setUploading(fileType);
+    setUploadingType(fileType);
     const res = await fetch("/applications/upload", { method: "POST", body: form });
-    setUploading(null);
+    setUploadingType(null);
 
     const data = await res.json().catch(() => null);
     if (!res.ok) return setErr(data?.message || "Не удалось загрузить файл.");
@@ -102,12 +107,7 @@ export default function ApplicationClient({ app, files }: { app: any; files: App
     window.location.href = "/applications";
   }
 
-  const docsLocked =
-  !!app.verified_at ||
-  (app.payment_verified === true &&
-    app.candidate_doc_verified === true &&
-    (app.parent_doc_verified === null || app.parent_doc_verified === true));
-
+  const showProgress = uploadingType !== null;
 
   return (
     <>
@@ -123,13 +123,14 @@ export default function ApplicationClient({ app, files }: { app: any; files: App
             <div className="sub">Регион: <b>{app.region?.name ?? app.region_id}</b></div>
           </div>
 
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-               {!docsLocked && (
-                 <Button onClick={onDelete} className="btn" style={{ borderColor: "rgba(255,77,109,.35)" }}>
-                   Удалить
-                 </Button>
-               )}
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <Button onClick={() => setPayOpen(true)}>Оплатить</Button>
 
+            {!docsLocked && (
+              <Button onClick={onDelete} className="btn" style={{ borderColor: "rgba(255,77,109,.35)" }}>
+                Удалить
+              </Button>
+            )}
           </div>
         </div>
 
@@ -147,11 +148,21 @@ export default function ApplicationClient({ app, files }: { app: any; files: App
       <div className="card" style={{ padding: 14 }}>
         <div style={{ fontWeight: 800, marginBottom: 10 }}>Документы</div>
 
+        {showProgress && (
+          <>
+            <div className="sub">Загрузка файла…</div>
+            <div className="progressWrap">
+              <div className="progressBar" />
+            </div>
+            <div style={{ height: 10 }} />
+          </>
+        )}
+
         <UploadBlock
           title="Скан оплаты"
           hint="JPG/PDF/PNG (лучше JPG). До 3MB."
           file={pay}
-          uploading={uploading === "payment"}
+          uploading={uploadingType === "payment"}
           locked={docsLocked}
           onView={() => pay && openFile(pay.storage_path)}
           onSelect={(f) => upload("payment", f)}
@@ -161,7 +172,7 @@ export default function ApplicationClient({ app, files }: { app: any; files: App
           title="Документ кандидата"
           hint="Паспорт/свидетельство. JPG/PDF. До 3MB."
           file={cand}
-          uploading={uploading === "candidate_doc"}
+          uploading={uploadingType === "candidate_doc"}
           locked={docsLocked}
           onView={() => cand && openFile(cand.storage_path)}
           onSelect={(f) => upload("candidate_doc", f)}
@@ -172,7 +183,7 @@ export default function ApplicationClient({ app, files }: { app: any; files: App
             title="Документ родителя/представителя"
             hint="JPG/PDF. До 3MB."
             file={parent}
-            uploading={uploading === "parent_doc"}
+            uploading={uploadingType === "parent_doc"}
             locked={docsLocked}
             onView={() => parent && openFile(parent.storage_path)}
             onSelect={(f) => upload("parent_doc", f)}
@@ -229,23 +240,13 @@ function UploadBlock({
       }}
     >
       <div style={{ minWidth: 220 }}>
-        <div style={{ fontWeight: 800 }}>
-          {done ? "✅ " : ""}{title}
-        </div>
+        <div style={{ fontWeight: 800 }}>{done ? "✅ " : ""}{title}</div>
         <div className="sub">{hint}</div>
-        {file && (
-          <div className="sub" style={{ marginTop: 4 }}>
-            Загружен: <b>{new Date(file.created_at).toLocaleString()}</b>
-          </div>
-        )}
+        {file && <div className="sub" style={{ marginTop: 4 }}>Загружен: <b>{new Date(file.created_at).toLocaleString()}</b></div>}
       </div>
 
       <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-        {file ? (
-          <Button onClick={onView}>Просмотреть</Button>
-        ) : (
-          <span className="pill">—</span>
-        )}
+        {file ? <Button onClick={onView}>Просмотреть</Button> : <span className="pill">—</span>}
 
         <label className="btn" style={{ whiteSpace: "nowrap", opacity: locked ? 0.6 : 1 }}>
           {uploading ? "Загрузка..." : done ? "Заменить" : "Загрузить"}
